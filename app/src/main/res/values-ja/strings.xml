@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="btn_capture">撮影</string>
+    <string name="btn_pick">写真を選択</string>
+    <string name="btn_save">保存 (%1$d)</string>
+    <string name="btn_clear_saved">保存済みを消去</string>
+    <string name="btn_close">閉じる</string>
+    <string name="btn_delete">削除</string>
+    <string name="btn_reanalyze">再解析</string>
+    <string name="btn_fetch_models">取得</string>
+    <string name="btn_reset_prompt">初期値に戻す</string>
+    <string name="settings">設定</string>
+    <string name="back">戻る</string>
+
+    <string name="status_pending">待機中</string>
+    <string name="status_running">解析中…</string>
+    <string name="status_done">完了 — タップして確認・編集</string>
+    <string name="status_saved">連絡先に保存済み</string>
+    <string name="status_error">エラー</string>
+    <string name="error_prefix">エラー: %1$s</string>
+    <string name="dlg_review">連絡先の確認</string>
+    <string name="dlg_error">エラー</string>
+
+    <string name="toast_saved">%1$d件保存しました</string>
+    <string name="toast_need_contacts">連絡先への書き込み権限が必要です</string>
+    <string name="toast_no_models">モデルがありません</string>
+    <string name="toast_list_failed">モデル一覧の取得に失敗: %1$s</string>
+
+    <string name="section_llm">LLMサービス</string>
+    <string name="label_service">サービス</string>
+    <string name="label_endpoint">エンドポイント (API base URL)</string>
+    <string name="label_key">APIキー</string>
+    <string name="label_key_optional">APIキー (任意)</string>
+    <string name="label_model">モデル (画像入力対応が必要)</string>
+    <string name="section_mapping">連絡先フィールドの割り当て</string>
+    <string name="mode_template">テンプレート — 抽出した項目を下のテンプレートで組み合わせる</string>
+    <string name="mode_llm">LLMにおまかせ — プロンプトでLLMがフィールドを直接決める</string>
+    <string name="hint_placeholders">使用できるプレースホルダー: %1$s</string>
+    <string name="hint_llm_mode">解析済みの項目は「再解析」で反映されます。システムプロンプトの末尾に次の指示が自動で付きます:</string>
+    <string name="section_prompt">システムプロンプト</string>
+    <string name="hint_prompt_keys">出力JSONのキー名を変えた場合は、テンプレートのプレースホルダーも同じ名前にしてください。</string>
+    <string name="section_appearance">外観</string>
+    <string name="theme_system">システム</string>
+    <string name="theme_light">ライト</string>
+    <string name="theme_dark">ダーク</string>
+
+    <string name="f_display_name">名前</string>
+    <string name="f_company">会社・組織</string>
+    <string name="f_department">部署</string>
+    <string name="f_job_title">役職</string>
+    <string name="f_phone_work">勤務先電話</string>
+    <string name="f_phone_mobile">携帯電話</string>
+    <string name="f_phone_fax">FAX</string>
+    <string name="f_email">メール</string>
+    <string name="f_address">住所</string>
+    <string name="f_website">ウェブサイト</string>
+    <string name="f_note">メモ</string>
+
+    <string name="err_no_model">設定でモデルを指定してください</string>
+    <string name="err_no_key">設定で %1$s のAPIキーを入力してください</string>
+    <string name="err_http">HTTP %1$s</string>
+    <string name="err_bad_response">応答の形式が不正です: %1$s</string>
+    <string name="err_no_json">応答にJSONが見つかりません: %1$s</string>
+    <string name="err_truncated">応答が max_tokens で途中で切れました</string>
+    <string name="err_bad_key">APIキーに空白や不可視文字が含まれています。貼り直してください</string>
+    <string name="err_save_failed">保存に失敗: %1$s</string>
+
+    <string name="note_deepseek">画像入力に対応したモデルかどうか、モデル一覧で確認してください。</string>
+    <string name="note_opencode_go">OpenAI互換。モデル一覧はキーなしでも取得できます。</string>
+    <string name="note_opencodex">スマホから使うには、ゲートウェイをLANアドレスにバインドし、そのアドレスを入力してください。</string>
+    <string name="note_openai_compatible">/v1/chat/completions を話すサーバーなら何でも (LiteLLM, vLLM, LM Studio…)。</string>
+    <string name="note_ollama">PCのOllamaを使うには OLLAMA_HOST=0.0.0.0 で起動し、PCのLAN IPを入力してください。</string>
+    <string name="note_groq">「取得」で現在提供されているビジョンモデルを選んでください。</string>
+    <string name="cam_done">完了 (%1$d)</string>
+    <string name="cam_shutter">撮影</string>
+    <string name="cam_hint">名刺1枚を画面に合わせてシャッターを押し、次の名刺へ。戻って写真を確認し「解析開始」を押すまで解析されません。</string>
+    <string name="toast_need_camera">カメラの権限が必要です</string>
+    <string name="toast_capture_failed">撮影に失敗: %1$s</string>
+    <string name="no_camera">この端末にはカメラがありません — ギャラリーから写真を選んでください。</string>
+    <string name="btn_analyze_all">解析開始 (%1$d)</string>
+    <string name="btn_analyze">解析</string>
+    <string name="status_new">未解析 — タップして確認・削除</string>
+    <string name="dlg_new">写真の確認</string>
+</resources>
