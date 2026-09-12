@@ -23,7 +23,7 @@ Readman은 나에게 명함을 건넨 사람의 개인정보를 존중하기 위
 
 ## Features
 
-- **Continuous capture** — the viewfinder stays open; shoot card after card, or pick up to 50 photos from the gallery.
+- **Continuous capture** — the viewfinder stays open with a card-shaped frame; shoot card after card, only the framed area is kept. Or pick up to 50 photos from the gallery.
 - **Review before spending** — nothing is sent to a model until you have deleted the bad shots and tapped **Analyze**.
 - **Contact mapping** — per-field templates (`{name}`, `{organization}`, `{department}`, `{team}`, `{title}`, `{phone}`, `{mobile}`, `{fax}`, `{email}`, `{address}`, `{website}`, `{other}`), or let the model fill the contact fields itself. The extraction prompt is editable.
 - English · 한국어 · 日本語, dark mode, Android 9+.

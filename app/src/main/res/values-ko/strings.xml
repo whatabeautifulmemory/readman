@@ -73,7 +73,7 @@
     <string name="note_groq">\'목록\'으로 현재 제공되는 비전 모델을 고르세요.</string>
     <string name="cam_done">완료 (%1$d)</string>
     <string name="cam_shutter">촬영</string>
-    <string name="cam_hint">명함 한 장을 화면에 맞추고 셔터를 누른 뒤 다음 명함으로. 나가서 사진을 확인하고 \'분석 시작\'을 눌러야 분석됩니다.</string>
+    <string name="cam_hint">명함 한 장을 틀에 맞추고 셔터를 누르세요. 틀 안쪽만 저장됩니다. 나가서 사진을 확인하고 \'분석 시작\'을 눌러야 분석됩니다.</string>
     <string name="toast_need_camera">카메라 권한이 필요합니다</string>
     <string name="toast_capture_failed">촬영 실패: %1$s</string>
     <string name="no_camera">카메라가 없는 기기입니다 — 갤러리에서 사진을 선택하세요.</string>

@@ -75,7 +75,7 @@
     <string name="note_groq">Use “Fetch” to pick a currently offered vision model.</string>
     <string name="cam_done">Done (%1$d)</string>
     <string name="cam_shutter">Take photo</string>
-    <string name="cam_hint">Frame one card, tap the shutter, move to the next. Nothing is analyzed until you review the shots and press Analyze.</string>
+    <string name="cam_hint">Fit one card into the frame and tap the shutter; only the framed area is kept. Nothing is analyzed until you review the shots and press Analyze.</string>
     <string name="toast_need_camera">Camera permission is required</string>
     <string name="toast_capture_failed">Capture failed: %1$s</string>
     <string name="no_camera">This device has no camera — pick photos from the gallery.</string>

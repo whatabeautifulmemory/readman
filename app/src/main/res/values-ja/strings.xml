@@ -73,7 +73,7 @@
     <string name="note_groq">「取得」で現在提供されているビジョンモデルを選んでください。</string>
     <string name="cam_done">完了 (%1$d)</string>
     <string name="cam_shutter">撮影</string>
-    <string name="cam_hint">名刺1枚を画面に合わせてシャッターを押し、次の名刺へ。戻って写真を確認し「解析開始」を押すまで解析されません。</string>
+    <string name="cam_hint">名刺1枚を枠に合わせてシャッターを押してください。枠の内側だけが保存されます。戻って写真を確認し「解析開始」を押すまで解析されません。</string>
     <string name="toast_need_camera">カメラの権限が必要です</string>
     <string name="toast_capture_failed">撮影に失敗: %1$s</string>
     <string name="no_camera">この端末にはカメラがありません — ギャラリーから写真を選んでください。</string>

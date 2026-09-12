@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
+import android.graphics.RectF
 import android.net.Uri
 import android.provider.ContactsContract
 import android.provider.ContactsContract.CommonDataKinds.Email
@@ -24,15 +25,19 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.Base64
+import kotlin.math.abs
+import kotlin.math.ln
 
 // ---------------------------------------------------------------- settings
 
@@ -101,6 +106,40 @@ fun decodeScaled(ctx: Context, uri: Uri, maxEdge: Int): Bitmap =
         if (scale < 1f) dec.setTargetSize((w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1))
         dec.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
     }
+
+/** Business card, 90×54 mm (ISO 7810 ID-1 is 1.586; either is close enough for a framing guide). */
+const val CARD_ASPECT = 90f / 54f
+
+/**
+ * Crops a fresh capture to the viewfinder frame, in place. [frame] is in fractions of the preview
+ * view; the preview shows the image FILL_CENTER-cropped to [viewAspect] (w/h), so the frame is mapped
+ * through that visible region. Works whether or not CameraX already cropped the JPEG to the viewport.
+ */
+fun cropToFrame(file: File, frame: RectF, viewAspect: Float) {
+    if (!viewAspect.isFinite() || viewAspect <= 0f) return
+    val src = ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { d, info, _ ->
+        // 48 MP phones: half-size is still ~12 MP, far above what the card region needs.
+        if (info.size.width.toLong() * info.size.height > 16_000_000L) d.setTargetSampleSize(2)
+        d.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+    }
+    val w = src.width.toFloat(); val h = src.height.toFloat()
+    // CameraController rotates the JPEG (EXIF) to the accelerometer orientation, while the preview and this
+    // frame follow the display rotation. With rotation lock, or a phone tilted down at a desk (>25° stops
+    // auto-rotate but not the accelerometer listener), the decoded bitmap is the view's TRANSPOSE. The JPEG
+    // is always the view aspect or its transpose, so pick the nearer in log space (square view → upright);
+    // the frame is centred on both axes, so swapping its axes is the same region for 90° and 270°.
+    val transposed = abs(ln(w / h / viewAspect)) > abs(ln(w / h * viewAspect))
+    val fr = if (transposed) RectF(frame.top, frame.left, frame.bottom, frame.right) else frame
+    val va = if (transposed) 1f / viewAspect else viewAspect
+    val (vw, vh) = if (w / h > va) h * va to h else w to w / va
+    val vx = (w - vw) / 2; val vy = (h - vh) / 2
+    val l = (vx + fr.left * vw).toInt().coerceIn(0, src.width - 2)
+    val t = (vy + fr.top * vh).toInt().coerceIn(0, src.height - 2)
+    val cw = (fr.width() * vw).toInt().coerceIn(1, src.width - l)
+    val ch = (fr.height() * vh).toInt().coerceIn(1, src.height - t)
+    val out = Bitmap.createBitmap(src, l, t, cw, ch)
+    file.outputStream().use { out.compress(Bitmap.CompressFormat.JPEG, 92, it) }
+}
 
 fun jpegBase64(bmp: Bitmap, quality: Int = 85): String {
     val out = ByteArrayOutputStream()
@@ -209,6 +248,16 @@ class AppVm(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { thumbs.withPermit { item.thumb = decodeScaled(getApplication(), u, 256) } }
                 .onFailure { item.error = getApplication<Application>().errorText(it); item.status = Status.ERROR }
+        }
+    }
+
+    /** A capture goes through the frame crop first so nothing outside the card ever reaches a model. */
+    fun addCapture(file: File, frame: RectF, viewAspect: Float, onDone: () -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { cropToFrame(file, frame, viewAspect) }
+            val ctx = getApplication<Application>()
+            add(listOf(FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)))
+            withContext(Dispatchers.Main) { onDone() }
         }
     }
 

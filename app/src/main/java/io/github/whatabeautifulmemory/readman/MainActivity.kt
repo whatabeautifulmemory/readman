@@ -20,6 +20,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -89,7 +90,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import android.graphics.RectF
 import androidx.compose.ui.layout.ContentScale
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
@@ -324,9 +334,26 @@ fun CameraScreen(vm: AppVm, onDone: () -> Unit) {
     // exits wait for the JPEG to land; Done/Close below are disabled for the same window.
     BackHandler(enabled = busy) {}
     val white = androidx.compose.ui.graphics.Color.White
+    // Card-shaped guide, as fractions of the preview view, so the crop can be mapped onto the JPEG.
+    var viewSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    val frame = remember(viewSize) {
+        val w = viewSize.width.toFloat(); val h = viewSize.height.toFloat()
+        if (w == 0f || h == 0f) RectF(0f, 0f, 1f, 1f) else {
+            val fw = minOf(w * 0.9f, h * 0.7f * CARD_ASPECT); val fh = fw / CARD_ASPECT
+            RectF((w - fw) / 2 / w, (h - fh) / 2 / h, (w + fw) / 2 / w, (h + fh) / 2 / h)
+        }
+    }
 
-    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
+    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black).onSizeChanged { viewSize = it }) {
         AndroidView(factory = { c -> PreviewView(c).apply { this.controller = controller } }, modifier = Modifier.fillMaxSize())
+        // Dim everything outside the frame; the frame itself is punched out with BlendMode.Clear.
+        Canvas(Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
+            val r = Offset(frame.left * size.width, frame.top * size.height)
+            val s = Size(frame.width() * size.width, frame.height() * size.height)
+            drawRect(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.55f))
+            drawRoundRect(androidx.compose.ui.graphics.Color.Transparent, r, s, CornerRadius(12.dp.toPx()), blendMode = BlendMode.Clear)
+            drawRoundRect(white, r, s, CornerRadius(12.dp.toPx()), style = Stroke(2.dp.toPx()))
+        }
         Text(stringResource(R.string.cam_hint), Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(16.dp),
             color = androidx.compose.ui.graphics.Color.White, style = MaterialTheme.typography.bodySmall)
         Row(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp).fillMaxWidth(),
@@ -346,7 +373,7 @@ fun CameraScreen(vm: AppVm, onDone: () -> Unit) {
                         busy = true
                         controller.takePicture(opts, ContextCompat.getMainExecutor(ctx), object : ImageCapture.OnImageSavedCallback {
                             override fun onImageSaved(r: ImageCapture.OutputFileResults) {
-                                vm.add(listOf(FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f))); shots++; busy = false
+                                vm.addCapture(f, frame, viewSize.width.toFloat() / viewSize.height) { shots++; busy = false }
                             }
                             override fun onError(e: ImageCaptureException) {
                                 toast(ctx, ctx.getString(R.string.toast_capture_failed, e.message)); busy = false
