@@ -81,4 +81,7 @@
     <string name="btn_analyze">분석</string>
     <string name="status_new">미분석 — 눌러서 확인/삭제</string>
     <string name="dlg_new">사진 확인</string>
+    <string name="cam_frame_portrait">세로 명함 틀</string>
+    <string name="cam_frame_landscape">가로 명함 틀</string>
+    <string name="section_language">언어</string>
 </resources>

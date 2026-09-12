@@ -2,10 +2,15 @@
 package io.github.whatabeautifulmemory.readman
 
 import android.app.Application
+import android.app.LocaleManager
+import android.os.Build
 import android.content.ContentProviderOperation
 import android.content.ContentResolver
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.res.Configuration
+import android.os.LocaleList
+import java.util.Locale
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.graphics.RectF
@@ -42,7 +47,7 @@ import kotlin.math.ln
 // ---------------------------------------------------------------- settings
 
 /** Thin SharedPreferences wrapper. Keys/endpoints/models are per provider so switching keeps them. */
-class Settings(ctx: Context) {
+class Settings(private val ctx: Context) {
     private val p: SharedPreferences = ctx.getSharedPreferences("readman", Context.MODE_PRIVATE)
 
     var providerId: String
@@ -71,6 +76,26 @@ class Settings(ctx: Context) {
         get() = p.getBoolean("llm_mapping", false)
         set(v) = p.edit().putBoolean("llm_mapping", v).apply()
 
+    /** Viewfinder frame orientation — Japanese cards are often portrait (縦型). Sticky across sessions. */
+    var cardPortrait: Boolean
+        get() = p.getBoolean("card_portrait", false)
+        set(v) = p.edit().putBoolean("card_portrait", v).apply()
+
+    /**
+     * "system" | "en" | "ko" | "ja". On Android 13+ the OS per-app language (App info → Language) is the
+     * single source of truth, so the in-app picker and that screen never disagree; below 13 it is a
+     * pref that attachBaseContext applies.
+     */
+    var language: String
+        get() = if (Build.VERSION.SDK_INT >= 33)
+            ctx.getSystemService(LocaleManager::class.java).applicationLocales.takeIf { !it.isEmpty }?.get(0)?.language ?: "system"
+        else p.getString("language", "system")!!
+        set(v) {
+            if (Build.VERSION.SDK_INT >= 33) ctx.getSystemService(LocaleManager::class.java).applicationLocales =
+                if (v == "system") LocaleList.getEmptyLocaleList() else LocaleList.forLanguageTags(v)
+            else p.edit().putString("language", v).apply()
+        }
+
     /** "system" | "light" | "dark" */
     var theme: String
         get() = p.getString("theme", "system")!!
@@ -81,9 +106,14 @@ class Settings(ctx: Context) {
     fun templates(): Map<String, String> = CONTACT_FIELDS.associateWith { template(it) }
 }
 
+/** A context whose resources speak [lang]. On 13+ the OS already did this for every context. */
+fun Context.localized(lang: String): Context = if (lang == "system" || Build.VERSION.SDK_INT >= 33) this
+    else createConfigurationContext(Configuration(resources.configuration).apply { setLocales(LocaleList(Locale.forLanguageTag(lang))) })
+
 /** Localized text for anything analyze()/saveAll() can throw. */
 fun Context.errorText(e: Throwable): String = when (e) {
     is LlmError -> when (e.code) {
+        "save_failed" -> getString(R.string.err_save_failed, e.arg)
         "no_model" -> getString(R.string.err_no_model)
         "no_key" -> getString(R.string.err_no_key, e.arg)
         "http" -> getString(R.string.err_http, e.arg)
@@ -205,7 +235,8 @@ class CardItem(val uri: Uri) {
     companion object { private var seq = 0 }
     val id = seq++
     var status by mutableStateOf(Status.NEW)
-    var error by mutableStateOf("")
+    /** Kept as the exception, not text, so a language switch re-localizes it at display time. */
+    var error by mutableStateOf<Throwable?>(null)
     var thumb by mutableStateOf<Bitmap?>(null)
     var card by mutableStateOf<Map<String, String>>(emptyMap())
     /** Editable in the UI before saving; this is exactly what goes into the address book. */
@@ -247,7 +278,7 @@ class AppVm(app: Application) : AndroidViewModel(app) {
         val item = CardItem(u).also { items += it }
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { thumbs.withPermit { item.thumb = decodeScaled(getApplication(), u, 256) } }
-                .onFailure { item.error = getApplication<Application>().errorText(it); item.status = Status.ERROR }
+                .onFailure { item.error = it; item.status = Status.ERROR }
         }
     }
 
@@ -272,7 +303,7 @@ class AppVm(app: Application) : AndroidViewModel(app) {
     }
 
     fun analyze(item: CardItem) {
-        item.status = Status.PENDING; item.error = ""
+        item.status = Status.PENDING; item.error = null
         viewModelScope.launch(Dispatchers.IO) {
             val ctx = getApplication<Application>()
             try {
@@ -289,7 +320,7 @@ class AppVm(app: Application) : AndroidViewModel(app) {
                     item.status = Status.DONE
                 }
             } catch (e: Exception) {
-                item.error = ctx.errorText(e); item.status = Status.ERROR
+                item.error = e; item.status = Status.ERROR
             }
         }
     }
@@ -315,8 +346,8 @@ class AppVm(app: Application) : AndroidViewModel(app) {
             var n = 0
             items.filter { it.savable }.forEach {
                 // A failed insert keeps the item DONE so the next 저장 tap simply retries it.
-                try { insertContact(cr, it.contact); it.error = ""; it.status = Status.SAVED; n++ }
-                catch (e: Exception) { it.error = getApplication<Application>().getString(R.string.err_save_failed, e.message) }
+                try { insertContact(cr, it.contact); it.error = null; it.status = Status.SAVED; n++ }
+                catch (e: Exception) { it.error = LlmError("save_failed", e.message ?: e.toString()) }
             }
             return n
         } finally { saving = false }

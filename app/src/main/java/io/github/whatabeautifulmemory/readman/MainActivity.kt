@@ -33,13 +33,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -47,9 +47,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CropLandscape
+import androidx.compose.material.icons.filled.CropPortrait
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -104,10 +106,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -138,7 +142,12 @@ private val PROVIDER_NOTES = mapOf(
 )
 private val THEMES = listOf("system" to R.string.theme_system, "light" to R.string.theme_light, "dark" to R.string.theme_dark)
 
+private val LANGUAGES = listOf("system" to R.string.theme_system, "en" to R.string.lang_en, "ko" to R.string.lang_ko, "ja" to R.string.lang_ja)
+
 class MainActivity : ComponentActivity() {
+    /** UI language override below Android 13: wrap the base context so every stringResource/Toast follows it. */
+    override fun attachBaseContext(base: Context) = super.attachBaseContext(base.localized(Settings(base).language))
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -204,6 +213,14 @@ fun MainScreen(vm: AppVm, onSettings: () -> Unit, onCamera: () -> Unit) {
         }
     }
     var editingId by rememberSaveable { mutableStateOf(-1) }
+    // Hoisted above the early return: the list leaves composition while editing and would otherwise
+    // come back scrolled to the top.
+    val listState = rememberLazyListState()
+    vm.items.firstOrNull { it.id == editingId }?.let { item ->
+        BackHandler { editingId = -1 }
+        EditScreen(item, vm) { editingId = -1 }
+        return
+    }
     val ready = vm.items.count { it.savable }
     val hasCamera = remember { ctx.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) }
 
@@ -225,7 +242,7 @@ fun MainScreen(vm: AppVm, onSettings: () -> Unit, onCamera: () -> Unit) {
             if (!hasCamera) Text(stringResource(R.string.no_camera), Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall)
             Text("${vm.settings.provider.label} · ${vm.settings.model(vm.settings.providerId)}",
                 Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall)
-            LazyColumn(Modifier.weight(1f)) {
+            LazyColumn(Modifier.weight(1f), state = listState) {
                 items(vm.items, key = { it.id }) { item ->
                     ItemRow(item) { editingId = item.id }
                     HorizontalDivider()
@@ -245,7 +262,6 @@ fun MainScreen(vm: AppVm, onSettings: () -> Unit, onCamera: () -> Unit) {
             }
         }
     }
-    vm.items.firstOrNull { it.id == editingId }?.let { item -> EditDialog(item, vm) { editingId = -1 } }
 }
 
 @Composable
@@ -255,46 +271,61 @@ private fun ItemRow(item: CardItem, onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(item.summary.ifBlank { item.uri.lastPathSegment ?: "" }, style = MaterialTheme.typography.bodyLarge)
-            val sub = if (item.error.isNotBlank()) stringResource(R.string.error_prefix, item.error) else stringResource(when (item.status) {
+            val err = item.error
+            val sub = if (err != null) stringResource(R.string.error_prefix, LocalContext.current.errorText(err)) else stringResource(when (item.status) {
                 Status.NEW -> R.string.status_new; Status.PENDING -> R.string.status_pending; Status.RUNNING -> R.string.status_running
                 Status.DONE -> R.string.status_done; Status.SAVED -> R.string.status_saved; Status.ERROR -> R.string.status_error
             })
             Text(sub, style = MaterialTheme.typography.bodySmall,
-                color = if (item.error.isNotBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                color = if (err != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (item.status == Status.RUNNING) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
     }
 }
 
+/**
+ * A full screen rather than a dialog: with eleven fields, the keyboard used to cover the dialog's
+ * action row. Actions live in the top bar, so they stay reachable while typing, and the field column
+ * pads itself above the IME the same way Settings does.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditDialog(item: CardItem, vm: AppVm, onClose: () -> Unit) {
+private fun EditScreen(item: CardItem, vm: AppVm, onClose: () -> Unit) {
     val ctx = LocalContext.current
     // A sharper preview than the list thumbnail, so blur/glare is visible before tokens are spent.
     val preview by produceState(item.thumb, item) {
         value = withContext(Dispatchers.IO) { runCatching { decodeScaled(ctx, item.uri, 1200) }.getOrNull() } ?: item.thumb
     }
     val isNew = item.status == Status.NEW
-    AlertDialog(onDismissRequest = onClose,
-        confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.btn_close)) } },
-        dismissButton = {
-            Row {
-                TextButton(onClick = { vm.remove(item); onClose() }) { Text(stringResource(R.string.btn_delete)) }
+    val inFlight = item.status == Status.PENDING || item.status == Status.RUNNING
+    Scaffold(topBar = {
+        TopAppBar(
+            title = {
+                Text(stringResource(when {
+                    item.status == Status.ERROR -> R.string.dlg_error; isNew -> R.string.dlg_new
+                    item.status == Status.PENDING -> R.string.status_pending; item.status == Status.RUNNING -> R.string.status_running
+                    else -> R.string.dlg_review
+                }), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            },
+            navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.btn_close)) } },
+            actions = {
+                IconButton(onClick = { vm.remove(item); onClose() }) { Icon(Icons.Filled.Delete, stringResource(R.string.btn_delete)) }
                 TextButton(enabled = isNew || item.status == Status.DONE || item.status == Status.ERROR,
                     onClick = { vm.analyze(item); onClose() }) { Text(stringResource(if (isNew) R.string.btn_analyze else R.string.btn_reanalyze)) }
+            })
+    }) { pad ->
+        Column(Modifier.padding(pad).consumeWindowInsets(pad).imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            preview?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxWidth().height(if (isNew) 360.dp else 200.dp), contentScale = ContentScale.Fit) }
+            item.error?.let { Text(ctx.errorText(it), color = MaterialTheme.colorScheme.error) }
+            if (inFlight) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+            if (!isNew) CONTACT_FIELDS.forEach { f ->
+                OutlinedTextField(value = item.contact[f] ?: "", onValueChange = { item.contact[f] = it; item.edited = true },
+                    label = { Text(stringResource(FIELD_LABELS[f]!!)) }, modifier = Modifier.fillMaxWidth(),
+                    enabled = item.status == Status.DONE)
             }
-        },
-        title = { Text(stringResource(when { item.status == Status.ERROR -> R.string.dlg_error; isNew -> R.string.dlg_new; else -> R.string.dlg_review })) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                preview?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxWidth().height(if (isNew) 320.dp else 160.dp), contentScale = ContentScale.Fit) }
-                if (item.status == Status.ERROR) Text(item.error, color = MaterialTheme.colorScheme.error)
-                if (!isNew) CONTACT_FIELDS.forEach { f ->
-                    OutlinedTextField(value = item.contact[f] ?: "", onValueChange = { item.contact[f] = it; item.edited = true },
-                        label = { Text(stringResource(FIELD_LABELS[f]!!)) }, modifier = Modifier.fillMaxWidth(),
-                        enabled = item.status == Status.DONE)
-                }
-            }
-        })
+        }
+    }
 }
 
 // ---------------------------------------------------------------- camera
@@ -335,11 +366,23 @@ fun CameraScreen(vm: AppVm, onDone: () -> Unit) {
     BackHandler(enabled = busy) {}
     val white = androidx.compose.ui.graphics.Color.White
     // Card-shaped guide, as fractions of the preview view, so the crop can be mapped onto the JPEG.
+    // Landscape (90×54) or portrait (54×90, common on Japanese cards); centred either way, which is
+    // what lets cropToFrame swap axes when the JPEG comes back transposed.
     var viewSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
-    val frame = remember(viewSize) {
+    var portraitCard by remember { mutableStateOf(vm.settings.cardPortrait) }
+    // Taller of the two overlay rows (insets included) — the portrait frame is height-bound and
+    // would otherwise run under the shutter on 16:9–19.5:9 phones with 3-button nav.
+    var barH by remember { mutableStateOf(0) }
+    val gapPx = with(LocalDensity.current) { 8.dp.roundToPx() }
+    val frame = remember(viewSize, portraitCard, barH) {
         val w = viewSize.width.toFloat(); val h = viewSize.height.toFloat()
+        val aspect = if (portraitCard) 1f / CARD_ASPECT else CARD_ASPECT
         if (w == 0f || h == 0f) RectF(0f, 0f, 1f, 1f) else {
-            val fw = minOf(w * 0.9f, h * 0.7f * CARD_ASPECT); val fh = fw / CARD_ASPECT
+            // Portrait: keep the frame inside the band between the rows, still centred on both axes
+            // (cropToFrame's transposition swap relies on that). Landscape keeps 0.7h — a symmetric
+            // band there would be under 100dp tall.
+            val maxH = if (h > w) minOf(h * 0.7f, h - 2f * (barH + gapPx)) else h * 0.7f
+            val fw = minOf(w * 0.9f, maxH * aspect); val fh = fw / aspect
             RectF((w - fw) / 2 / w, (h - fh) / 2 / h, (w + fw) / 2 / w, (h + fh) / 2 / h)
         }
     }
@@ -354,9 +397,19 @@ fun CameraScreen(vm: AppVm, onDone: () -> Unit) {
             drawRoundRect(androidx.compose.ui.graphics.Color.Transparent, r, s, CornerRadius(12.dp.toPx()), blendMode = BlendMode.Clear)
             drawRoundRect(white, r, s, CornerRadius(12.dp.toPx()), style = Stroke(2.dp.toPx()))
         }
-        Text(stringResource(R.string.cam_hint), Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(16.dp),
-            color = androidx.compose.ui.graphics.Color.White, style = MaterialTheme.typography.bodySmall)
-        Row(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp).fillMaxWidth(),
+        // safeDrawingPadding: in landscape the punch-hole/side nav bar sits on the edge the toggle is on.
+        Row(Modifier.align(Alignment.TopCenter).onSizeChanged { barH = maxOf(barH, it.height) }.safeDrawingPadding().padding(horizontal = 8.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.cam_hint), Modifier.weight(1f).padding(8.dp),
+                color = white, style = MaterialTheme.typography.bodySmall)
+            IconButton(onClick = { portraitCard = !portraitCard; vm.settings.cardPortrait = portraitCard },
+                colors = IconButtonDefaults.iconButtonColors(contentColor = white)) {
+                // Shows the orientation you would switch TO.
+                if (portraitCard) Icon(Icons.Filled.CropLandscape, stringResource(R.string.cam_frame_landscape))
+                else Icon(Icons.Filled.CropPortrait, stringResource(R.string.cam_frame_portrait))
+            }
+        }
+        Row(Modifier.align(Alignment.BottomCenter).onSizeChanged { barH = maxOf(barH, it.height) }.safeDrawingPadding().padding(24.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             IconButton(enabled = !busy, onClick = onDone,
                 colors = IconButtonDefaults.iconButtonColors(contentColor = white, disabledContentColor = white.copy(alpha = .38f))) {
@@ -498,6 +551,15 @@ fun SettingsScreen(vm: AppVm, onBack: () -> Unit) {
             Text(stringResource(R.string.hint_prompt_keys), style = MaterialTheme.typography.bodySmall)
 
             HorizontalDivider()
+            Text(stringResource(R.string.section_language), style = MaterialTheme.typography.titleMedium)
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                LANGUAGES.forEachIndexed { i, (id, label) ->
+                    SegmentedButton(selected = s.language == id, shape = SegmentedButtonDefaults.itemShape(i, LANGUAGES.size),
+                        // Below 13 recreate() re-runs attachBaseContext (`screen` is rememberSaveable, so we land
+                        // back here); on 13+ LocaleManager triggers the configuration change itself.
+                        onClick = { if (s.language != id) { s.language = id; if (Build.VERSION.SDK_INT < 33) (ctx as Activity).recreate() } }) { Text(stringResource(label)) }
+                }
+            }
             Text(stringResource(R.string.section_appearance), style = MaterialTheme.typography.titleMedium)
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 THEMES.forEachIndexed { i, (id, label) ->

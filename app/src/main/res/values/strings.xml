@@ -83,4 +83,10 @@
     <string name="btn_analyze">Analyze</string>
     <string name="status_new">Not analyzed yet — tap to check or delete</string>
     <string name="dlg_new">Check the photo</string>
+    <string name="cam_frame_portrait">Portrait card frame</string>
+    <string name="cam_frame_landscape">Landscape card frame</string>
+    <string name="section_language">Language</string>
+    <string name="lang_en" translatable="false">English</string>
+    <string name="lang_ko" translatable="false">한국어</string>
+    <string name="lang_ja" translatable="false">日本語</string>
 </resources>

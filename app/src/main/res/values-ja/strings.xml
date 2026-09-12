@@ -81,4 +81,7 @@
     <string name="btn_analyze">解析</string>
     <string name="status_new">未解析 — タップして確認・削除</string>
     <string name="dlg_new">写真の確認</string>
+    <string name="cam_frame_portrait">縦型名刺の枠</string>
+    <string name="cam_frame_landscape">横型名刺の枠</string>
+    <string name="section_language">言語</string>
 </resources>
